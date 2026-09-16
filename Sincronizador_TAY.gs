@@ -421,3 +421,71 @@ function transformData(headers, rows, mode) {
 
   return { data: [CONFIG.WC_HEADERS, ...parents, ...variations], mappedColsCount: mappedIndices.size, quality };
 }
+
+/**
+ * Actualiza el contenido de una hoja de Google Sheet.
+ */
+function updateSheet(sheetId, sheetName, data) {
+  try {
+    const ss = SpreadsheetApp.openById(sheetId);
+    let sheet = ss.getSheetByName(sheetName) || ss.getSheets()[0];
+    sheet.clear();
+    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+  } catch (e) {
+    console.error(`Error actualizando hoja ${sheetName} en ${sheetId}: ` + e.message);
+  }
+}
+
+/**
+ * Sincroniza la pestaña de atributos en la hoja de destino.
+ */
+function syncAttributes(sheetId, attrData, commands) {
+  try {
+    const ss = SpreadsheetApp.openById(sheetId);
+    let sheet = ss.getSheetByName(CONFIG.ATTRIBUTES_SHEET_NAME) || ss.insertSheet(CONFIG.ATTRIBUTES_SHEET_NAME);
+    const headers = ["Attribute ID", "Attribute Name", "Attribute Label", "Attribute Type", "Attribute Orderby", "Attribute Terms", "Insert", "Update", "Delete"];
+    const data = [
+      headers,
+      ["pa_color", "Color / Terminación", "Color / Terminación", "select", "menu_order", attrData.colors.join(", "), ...commands],
+      ["pa_size", "Tamaño", "Tamaño", "select", "menu_order", attrData.sizes.join(", "), ...commands]
+    ];
+    sheet.clear();
+    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+  } catch (e) {
+    console.error(`Error sincronizando atributos en ${sheetId}: ` + e.message);
+  }
+}
+
+/**
+ * Lee los comandos de Insert/Update/Delete de la primera fila del maestro
+ * para aplicarlos a la definición de los atributos globales.
+ */
+function getAttributeCommandsFromMaster(headers, rows) {
+  if (rows.length === 0) return ["1", "1", "0"];
+  const firstRow = rows[0];
+  const rowObj = {};
+  headers.forEach((h, i) => { if(h) rowObj[h.trim()] = firstRow[i]; });
+  return [
+    normalizeControlValue(rowObj['Insert'], 'Insert (Global)', 'GLOBAL'),
+    normalizeControlValue(rowObj['Update'], 'Update (Global)', 'GLOBAL'),
+    normalizeControlValue(rowObj['Delete'], 'Delete (Global)', 'GLOBAL')
+  ];
+}
+
+/**
+ * Extrae todos los valores únicos de Color y Tamaño para poblar el diccionario de atributos.
+ */
+function extractUniqueAttributes(headers, rows) {
+  const uniqueColors = [];
+  const uniqueSizes = [];
+  rows.forEach(row => {
+    const rowObj = {};
+    headers.forEach((h, i) => { if(h) rowObj[h.trim()] = row[i]; });
+    if (rowObj['Variable Color / Terminación']) uniqueColors.push(rowObj['Variable Color / Terminación']);
+    if (rowObj['Variable Tamaño']) uniqueSizes.push(rowObj['Variable Tamaño']);
+  });
+  return {
+    colors: [...new Set(uniqueColors)].filter(Boolean).sort(),
+    sizes: [...new Set(uniqueSizes)].filter(Boolean).sort()
+  };
+}
