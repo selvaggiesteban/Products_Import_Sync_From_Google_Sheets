@@ -49,19 +49,39 @@ The framework maps source fields to the WooCommerce API v3. Typical mapping incl
 
 ---
 
-## Setup & Deployment
+## Setup & Configuration
 
-### 1. Install the Logging Plugin
-Deploy the woocommerce-api-updates.php plugin to your WordPress site to enable execution tracking.
+### 1. WordPress Site Configuration
+1. Upload the `woocommerce-api-updates.php` plugin to your `/wp-content/plugins/` directory.
+2. Activate the plugin via the WordPress Admin panel.
+3. Generate REST API keys: **WooCommerce > Settings > Advanced > REST API**. Ensure the keys have **Read/Write** permissions.
 
-### 2. Deploy the Engine
-Copy the WC_API_Updates_From_Google_Sheets.gs code into your Google Apps Script editor.
+### 2. Google Apps Script Setup
+1. Open your Google Spreadsheet.
+2. Go to **Extensions > Apps Script**.
+3. Create a new script file and paste the contents of `WC_API_Updates_From_Google_Sheets.gs`.
+4. Save the project.
 
-### 3. Configure
-Update the CONFIG object with your store credentials, source IDs, and column mappings.
+### 3. Configuring the CONFIG Object
+Locate the `const CONFIG` block at the top of the script and update the following:
 
-### 4. Execution
-Run the mainSync function. For large catalogs, the system will automatically handle timeouts via the checkpoint system—simply run the function again to resume.
+- **Global Settings**:
+  - `MASTER_SHEET_ID`: The ID of the spreadsheet containing your master catalog.
+  - `MASTER_SHEET_NAME`: The exact name of the tab where the data is located.
+
+- **Store-Specific Settings**:
+  - `url`: Your store's base URL (e.g., `https://yourstore.com`).
+  - `ck` & `cs`: Your WooCommerce Consumer Key and Consumer Secret.
+  - `logEndpoint`: The URL provided by the logger plugin (usually `yourstore.com/wp-json/sync/v1/log`).
+  - `sheetId`: ID of the spreadsheet used for intermediate verification sheets.
+
+- **Column Mapping**:
+  - Update the `API_MAPPING` object to match the headers in your Master Sheet. For example, if your column is named "Product Title", change `"Product Name": "name"` to `"Product Title": "name"`.
+
+### 4. Execution & Maintenance
+1. Select the `mainSync` function from the toolbar.
+2. Click **Run**.
+3. **Handling Timeouts**: Because of Google's execution limits, the script may stop. Simply click **Run** again; the system will read the last processed SKU from `PropertiesService` and resume without duplicating data.
 
 ## License
 MIT License.
