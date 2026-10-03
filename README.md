@@ -1,19 +1,17 @@
 # WooCommerce Professional Sync Engine
 
-A high-performance, agnostic synchronization framework built with Google Apps Script (GAS) to manage large-scale product catalogs across multiple WooCommerce stores.
+A high-performance synchronization framework built with Google Apps Script (GAS) to manage large-scale product catalogs across multiple WooCommerce stores.
 
-This engine decouples data extraction from API execution, allowing catalog management from various sources (Google Sheets or REST API Endpoints) while ensuring 100% data integrity and avoiding the common limitations of the GAS environment.
+This engine optimizes the flow of data from Google Sheets to the WooCommerce API, ensuring 100% data integrity and overcoming the common limitations of the GAS environment.
 
 ## System Architecture
 
 The framework operates as a linear pipeline, ensuring that data is normalized and validated before reaching the WooCommerce API:
 
-[Data Source] -> [Transformation Engine] -> [Contrast Manager] -> [Unitary Pusher] -> [Logging]
+[Google Sheet Source] -> [Transformation Engine] -> [Contrast Manager] -> [Unitary Pusher] -> [Logging]
 
-### 1. Data Source Strategies
-The engine is source-agnostic, implementing a strategy pattern for extraction:
-- Google Sheets Strategy: High-efficiency reading of Master Sheets with intermediate visibility layers.
-- API Endpoint Strategy: Direct integration with external JSON REST APIs for real-time catalog fetching.
+### 1. Data Extraction Strategy
+The engine utilizes a high-efficiency reading process for Master Sheets, incorporating intermediate visibility layers to allow user verification before the API push.
 
 ### 2. Transformation & Normalization Engine
 Ensures a seamless transfer between human-readable data and machine-readable API requirements:
@@ -35,14 +33,14 @@ Designed for high-volume catalogs where traditional scripts would fail:
 ### Required Credentials
 For each store, the following is required:
 - WooCommerce REST API Keys: Consumer Key (ck) and Consumer Secret (cs) with Read/Write permissions.
-- Data Source: Either a Google Sheet ID or a JSON Endpoint URL.
+- Google Spreadsheet IDs: Master Sheet ID and Intermediate Sheet ID.
 - Log Endpoint: A WordPress REST endpoint (via the provided plugin) to track execution results.
 
 ### Data Mapping (Source -> WooCommerce)
 The framework maps source fields to the WooCommerce API v3. Typical mapping includes:
 
 | Source Field (Example) | WC API Key | Purpose |
-| :--- | :--- | :--- |
+| :--- | :--- | : :--- |
 | Product Name | name | Public title |
 | Regular Price | regular_price | Standard selling price |
 | SKU | sku | Unique identifier (Required) |
