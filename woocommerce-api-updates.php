@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Products Import Sync Logger
+ * Plugin Name: WooCommerce API Updates From Google Sheets
  * Description: Captura logs de sincronización desde Google Apps Script mediante un endpoint REST.
  * Version: 1.0.0
  * Author: Esteban Selvaggi
