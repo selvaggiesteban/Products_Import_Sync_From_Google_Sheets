@@ -1,4 +1,4 @@
-# WooCommerce Professional Sync Engine
+# WooCommerce API Updates From Google Sheets
 
 A high-performance synchronization framework built with Google Apps Script (GAS) to manage large-scale product catalogs across multiple WooCommerce stores.
 
