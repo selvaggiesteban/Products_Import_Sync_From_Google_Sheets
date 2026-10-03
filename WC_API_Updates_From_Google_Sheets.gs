@@ -1,8 +1,8 @@
 /**
- * WooCommerce Professional Sync Engine (VERSION 5.0 - MODULAR)
+ * WooCommerce API Sync Engine (VERSION 5.1 - AGNOSTIC)
  * 
- * This framework decouples data extraction from synchronization logic.
- * Designed to manage large-scale product catalogs across multiple WooCommerce stores.
+ * High-performance synchronization framework for managing large-scale 
+ * product catalogs from Google Sheets to WooCommerce via REST API v3.
  */
 
 // --- CONFIGURATION (Placeholders for agnostic use) ---
@@ -18,13 +18,14 @@ const CONFIG = {
       cs: "cs_...",
       logEndpoint: "https://store1.com/wp-json/sync/v1/log",
       sheetId: "INTERMEDIATE_SHEET_ID_1",
-      mode: "retail"
+      mode: "retail" // "retail" or "wholesale"
     }
   },
 
   PRODUCTS_SHEET_NAME: "All Products",
   ATTRIBUTES_SHEET_NAME: "Product Attributes",
 
+  // Standardized Mapping based on WooCommerce REST API v3
   API_MAPPING: {
     "Product Name": "name",
     "Short Description": "short_description",
@@ -40,19 +41,15 @@ const CONFIG = {
     "Images": "images"
   },
 
+  // Standard WooCommerce CSV Import Headers
   WC_HEADERS: [
-    "Product Id", "Product Variation Id", "Tipo", "SKU", "GTIN, UPC, EAN o ISBN", "Nombre", "Publicado", "¿Está destacado?",
-    "Visibilidad en el catálogo", "Descripción corta", "Descripción",
-    "Día en que empieza el precio rebajado", "Día en que termina el precio rebajado",
-    "Estado del impuesto", "Clase de impuesto", "¿Existencias?", "Inventario",
-    "Cantidad de bajo inventario", "¿Permitir reservas de productos agotados?",
-    "¿Vendido individualmente?", "Peso (kg)", "Longitud (cm)", "Anchura (cm)", "Altura (cm)",
-    "¿Permitir valoraciones de clientes?", "Nota de compra", "Precio rebajado", "Precio normal",
-    "Categorías", "Etiquetas", "Clase de envío", "Imágenes", "Límite de descargas",
-    "Días de caducidad de la descarga", "Superior", "Productos agrupados",
-    "Ventas dirigidas", "Ventas cruzadas", "URL externa", "Texto del botón", "Posición",
-    "Swatches Attributes", "Marcas", "Parent",
-    "Insert", "Update", "Delete"
+    "ID", "SKU", "Name", "Published", "Is featured?", "Visibility in catalog", 
+    "Short description", "Description", "Regular price", "Sale price", 
+    "Categories", "Tags", "Images", "Stock", "Stock status", "Weight", 
+    "Length", "Width", "Height", "Parent", "Type", "Attribute 1 name", 
+    "Attribute 1 value(s)", "Attribute 2 name", "Attribute 2 value(s)", 
+    "Attribute 3 name", "Attribute 3 value(s)", "Attribute 4 name", 
+    "Attribute 4 value(s)", "Insert", "Update", "Delete"
   ]
 };
 
@@ -75,7 +72,7 @@ function mainSync() {
     for (const storeKey in CONFIG.STORES) {
       const store = CONFIG.STORES[storeKey];
       
-      // EXTRACTOR: Google Sheets implementation
+      // Transformation process
       const transformed = transformData(headers, rows, store.mode);
       updateSheet(store.sheetId, CONFIG.PRODUCTS_SHEET_NAME, transformed.data);
       syncAttributes(store.sheetId, uniqueAttributes, attrCommands);
@@ -89,8 +86,8 @@ function mainSync() {
       const distributeChanges = (list, target) => {
         list.forEach(item => {
           const sku = item.sku ? item.sku.toUpperCase() : "";
-          const row = transformed.data.slice(1).find(r => r[3] === sku);
-          if (row && row[2] === 'variation') changesVariations[target].push(item);
+          const row = transformed.data.slice(1).find(r => r[1] === sku); // SKU is at index 1 in WC_HEADERS
+          if (row && row[20] === 'variation') changesVariations[target].push(item);
           else changesParents[target].push(item);
         });
       };
@@ -163,8 +160,8 @@ function hasChanged(localRow, remoteProduct) {
     const localVal = String(localRow[localKey] || "").trim();
     const remoteVal = String(remoteProduct[remoteKey] || "").trim();
     let normalizedLocal = localVal;
-    if (localKey === "Published") normalizedLocal = (localVal === "1" || localVal.toLowerCase() === "si") ? "publish" : "draft";
-    else if (localKey === "In Stock?") normalizedLocal = (localVal === "1" || localVal.toLowerCase() === "si") ? "instock" : "outofstock";
+    if (localKey === "Published") normalizedLocal = (localVal === "1" || localVal.toLowerCase() === "si" || localVal.toLowerCase() === "yes") ? "publish" : "draft";
+    else if (localKey === "In Stock?") normalizedLocal = (localVal === "1" || localVal.toLowerCase() === "si" || localVal.toLowerCase() === "yes") ? "instock" : "outofstock";
     if (normalizedLocal !== remoteVal) return true;
   }
   return false;
@@ -174,20 +171,26 @@ function mapToApiJson(rowObj) {
   const json = {};
   for (const [csvHeader, apiKey] of Object.entries(CONFIG.API_MAPPING)) {
     let val = rowObj[csvHeader];
-    if (csvHeader === "Published") val = (val === "1" || String(val).toLowerCase() === "si") ? "publish" : "draft";
+    if (csvHeader === "Published") val = (val === "1" || String(val).toLowerCase() === "si" || String(val).toLowerCase() === "yes") ? "publish" : "draft";
     else if (csvHeader === "Categories") val = val ? [{ name: val }] : [];
     else if (csvHeader === "Images") val = val ? val.split(", ").map(url => ({ src: url.trim() })) : [];
-    else if (csvHeader === "In Stock?") val = (val === "1" || String(val).toLowerCase() === "si") ? "instock" : "outofstock";
+    else if (csvHeader === "In Stock?") val = (val === "1" || String(val).toLowerCase() === "si" || String(val).toLowerCase() === "yes") ? "instock" : "outofstock";
     if (apiKey === "regular_price" || apiKey === "sale_price") val = cleanPrice(val);
     json[apiKey] = val;
   }
-  if (rowObj['Tipo'] && rowObj['Tipo'].toLowerCase() === 'variation') {
+  if (rowObj['Type'] && rowObj['Type'].toLowerCase() === 'variation') {
     const attributes = [];
-    const attrMap = { 'Variable Color': 'pa_color', 'Variable Size': 'pa_size', 'Variable Diameter': 'pa_diameter', 'Variable Model': 'pa_model' };
-    for (const [masterCol, apiAttr] of Object.entries(attrMap)) {
-      const val = rowObj[masterCol];
-      if (val) attributes.push({ name: apiAttr, option: String(val).trim() });
-    }
+    // Mapping internal logic for attribute pairs
+    const attrPairs = [
+      { name: 'pa_color', source: 'Attribute 1 value(s)' },
+      { name: 'pa_size', source: 'Attribute 2 value(s)' },
+      { name: 'pa_diameter', source: 'Attribute 3 value(s)' },
+      { name: 'pa_model', source: 'Attribute 4 value(s)' }
+    ];
+    attrPairs.forEach(pair => {
+      const val = rowObj[pair.source];
+      if (val) attributes.push({ name: pair.name, option: String(val).trim() });
+    });
     json.attributes = attributes;
   }
   return json;
@@ -287,30 +290,19 @@ function sendSyncLog(store, results) {
 
 function normalizeControlValue(value, columnHeader, sku) {
   const strVal = String(value || "").trim();
-  return (strVal === "1") ? "1" : "0";
+  return (strVal === "1" || strVal.toLowerCase() === "yes" || strVal.toLowerCase() === "si") ? "1" : "0";
 }
 
 function transformData(headers, rows, mode) {
   const parents = [];
   const variations = [];
   const mappedIndices = new Set();
-  const variableSkus = new Set();
   const variationsByParent = new Map();
 
   rows.forEach(row => {
     const rowObj = {};
     headers.forEach((header, index) => { if (header) rowObj[header.trim()] = row[index]; });
-    const itemVal = String(rowObj['Item'] || "").trim();
-    const typeVal = rowObj['Tipo'] ? String(rowObj['Tipo']).toLowerCase() : "";
-    if (itemVal) {
-      const normalizedItem = itemVal.toUpperCase();
-      if (typeVal === 'variable') variableSkus.add(normalizedItem);
-    }
-  });
-
-  rows.forEach(row => {
-    const rowObj = {};
-    headers.forEach((header, index) => { if (header) rowObj[header.trim()] = row[index]; });
+    
     const transformedRow = new Array(CONFIG.WC_HEADERS.length).fill("");
     const setVal = (wcColName, value) => {
       const idx = CONFIG.WC_HEADERS.indexOf(wcColName);
@@ -324,60 +316,47 @@ function transformData(headers, rows, mode) {
       }
     };
 
-    const productType = rowObj['Tipo'] ? rowObj['Tipo'].toLowerCase() : "simple";
-    setVal("Product Id", "");
-    setVal("Product Variation Id", "");
-    setVal("Visibilidad en el catálogo", "visible");
-    const itemVal = String(rowObj['Item'] || "").trim();
-    const generatedSku = itemVal ? itemVal.toUpperCase() : "";
-    setVal("SKU", generatedSku);
+    const productType = rowObj['Type'] ? rowObj['Type'].toLowerCase() : "simple";
+    setVal("ID", "");
+    setVal("SKU", String(rowObj['SKU'] || "").trim().toUpperCase());
+    setVal("Name", rowObj['Product Name']);
+    setVal("Published", rowObj['Published']);
+    setVal("Visibility in catalog", "visible");
+    setVal("Type", productType);
+    setVal("Parent", String(rowObj['Parent'] || "").trim().toUpperCase());
+    setVal("Categories", rowObj['Categories']);
 
-    const parentIdx = headers.findIndex(h => h && h.toLowerCase().trim() === 'padre');
-    let parentVal = (parentIdx !== -1) ? String(row[parentIdx] || "").trim() : "";
-    let finalParent = parentVal ? parentVal.toUpperCase() : "";
-    setVal("Superior", finalParent);
-    setVal("Tipo", rowObj['Tipo']);
-    setVal("Nombre", rowObj['Nombre/titulo']);
-    setVal("Categorías", rowObj['Categoria WooCommerce']);
-
-    if (mode === 'minorista') {
-      setVal("Precio normal", cleanPrice(rowObj['Precios Minorista']));
-      setVal("Precio rebajado", cleanPrice(rowObj['Precios oferta minorista']));
-      setVal("Publicado", rowObj['Publicada Minorista']);
-      setVal("¿Existencias?", rowObj['Existencias Minorista']);
-      setVal("Inventario", rowObj['Inventario Minorista']);
-      setVal("Cantidad de bajo inventario", rowObj['Cantidad de bajo inventario Minorista']);
+    if (mode === 'retail') {
+      setVal("Regular price", cleanPrice(rowObj['Regular Price']));
+      setVal("Sale price", cleanPrice(rowObj['Sale Price']));
+      setVal("Stock status", rowObj['In Stock?']);
+      setVal("Stock", rowObj['Inventory']);
     } else {
-      setVal("Precio normal", cleanPrice(rowObj['Precios Mayorista']));
-      setVal("Precio rebajado", cleanPrice(rowObj['Precios oferta Mayorista']));
-      setVal("Publicado", rowObj['Publicada Mayorista']);
-      setVal("¿Existencias?", rowObj['Existencias Mayorista']);
-      setVal("Inventario", rowObj['Inventario Mayorista']);
-      setVal("Cantidad de bajo inventario", rowObj['Cantidad de bajo inventario Mayorista']);
+      // wholesale logic uses separate source columns if defined, otherwise defaults to standard
+      setVal("Regular price", cleanPrice(rowObj['Wholesale Regular Price'] || rowObj['Regular Price']));
+      setVal("Sale price", cleanPrice(rowObj['Wholesale Sale Price'] || rowObj['Sale Price']));
+      setVal("Stock status", rowObj['Wholesale In Stock?'] || rowObj['In Stock?']);
+      setVal("Stock", rowObj['Wholesale Inventory'] || rowObj['Inventory']);
     }
 
-    setVal("Día en que empieza el precio rebajado", rowObj['Día en que empieza el precio rebajado']);
-    setVal("Día en que termina el precio rebajado", rowObj['Día en que termina el precio rebajado']);
-    setVal("Peso (kg)", rowObj['Correo - Peso (kg)']);
-    setVal("Longitud (cm)", rowObj['Correo - Longitud (cm)']);
-    setVal("Anchura (cm)", rowObj['Correo - Ancho (cm)']);
-    setVal("Altura (cm)", rowObj['Correo - Altura (cm)']);
-    setVal("Clase de envío", rowObj['Clase de envío']);
-    const imageCols = ['Imágenes Principal', 'Imágenes Galeria 1', 'Imágenes Galeria 2', 'Imágenes Galeria 3', 'Imágenes Galeria 4'];
-    const imgs = imageCols.filter(col => rowObj[col] && String(rowObj[col]).trim() !== "").map(col => rowObj[col]);
-    setVal("Imágenes", imgs.join(", "));
-    const colorVal = rowObj['Color / Terminación'] || rowObj['Variable Color / Terminación'] || "";
-    if (colorVal) setVal("Swatches Attributes", `Color|${colorVal}`);
+    setVal("Weight", rowObj['Weight']);
+    setVal("Length", rowObj['Length']);
+    setVal("Width", rowObj['Width']);
+    setVal("Height", rowObj['Height']);
+    
+    const images = rowObj['Images'] ? String(rowObj['Images']).split(", ").map(url => url.trim()) : [];
+    setVal("Images", images.join(", "));
 
-    setVal("Insert", normalizeControlValue(rowObj['Insert'], 'Insert', generatedSku));
-    setVal("Update", normalizeControlValue(rowObj['Update'], 'Update', generatedSku));
-    setVal("Delete", normalizeControlValue(rowObj['Delete'], 'Delete', generatedSku));
+    setVal("Insert", normalizeControlValue(rowObj['Insert'], 'Insert', transformedRow[1]));
+    setVal("Update", normalizeControlValue(rowObj['Update'], 'Update', transformedRow[1]));
+    setVal("Delete", normalizeControlValue(rowObj['Delete'], 'Delete', transformedRow[1]));
 
     if (productType === 'variation') {
       variations.push(transformedRow);
-      if (finalParent) {
-        if (!variationsByParent.has(finalParent)) variationsByParent.set(finalParent, []);
-        variationsByParent.get(finalParent).push(transformedRow);
+      const parentSku = transformedRow[CONFIG.WC_HEADERS.indexOf("Parent")];
+      if (parentSku) {
+        if (!variationsByParent.has(parentSku)) variationsByParent.set(parentSku, []);
+        variationsByParent.get(parentSku).push(transformedRow);
       }
     } else {
       parents.push(transformedRow);
@@ -385,31 +364,30 @@ function transformData(headers, rows, mode) {
   });
 
   const skuIdx = CONFIG.WC_HEADERS.indexOf("SKU");
-  const typeIdx = CONFIG.WC_HEADERS.indexOf("Tipo");
-  const attrConfigs = [
-    { name: "col-ter", valCol: 'Variable Color / Terminación', fallbackCol: 'Color / Terminación' },
-    { name: "diam", valCol: 'Variable Diametro' },
-    { name: "modelo", valCol: 'Variable Modelo' },
-    { name: "tamano", valCol: 'Variable Tamaño' }
-  ];
-  attrConfigs.forEach((cfg, i) => {
-    const attrValIdx = CONFIG.WC_HEADERS.indexOf(`Valor(es) del atributo ${i+1}`);
-    if (attrValIdx === -1) return;
+  const typeIdx = CONFIG.WC_HEADERS.indexOf("Type");
+  
+  // Attribute Saturation for Variable Products
+  for (let i = 1; i <= 4; i++) {
+    const attrValIdx = CONFIG.WC_HEADERS.indexOf(`Attribute ${i} value(s)`);
+    if (attrValIdx === -1) continue;
+    
     parents.forEach(parentRow => {
-      const parentSku = parentRow[skuIdx];
+      const pSku = parentRow[skuIdx];
       if (parentRow[typeIdx] === 'variable') {
         const currentVal = parentRow[attrValIdx];
         if (currentVal && String(currentVal).trim() !== "") return;
-        const children = variationsByParent.get(parentSku) || [];
+        
+        const children = variationsByParent.get(pSku) || [];
         const values = new Set();
         children.forEach(c => { if(c[attrValIdx]) values.add(String(c[attrValIdx]).trim()); });
         if (values.size > 0) parentRow[attrValIdx] = [...values].join(" | ");
       }
     });
-  });
+  }
 
   const finalData = [CONFIG.WC_HEADERS];
   const processedSkus = new Set();
+  
   parents.forEach(parentRow => {
     const pSku = parentRow[skuIdx];
     finalData.push(parentRow);
@@ -420,6 +398,7 @@ function transformData(headers, rows, mode) {
       processedSkus.add(cRow[skuIdx]);
     });
   });
+  
   variations.forEach(vRow => {
     if (!processedSkus.has(vRow[skuIdx])) finalData.push(vRow);
   });
@@ -434,7 +413,7 @@ function updateSheet(sheetId, sheetName, data) {
     sheet.clear();
     sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
   } catch (e) {
-    console.error(`Error actualizando hoja ${sheetName}: ${e.message}`);
+    console.error(`Error updating sheet ${sheetName}: ${e.message}`);
   }
 }
 
@@ -445,15 +424,15 @@ function syncAttributes(sheetId, attrData, commands) {
     const headers = ["Attribute ID", "Attribute Name", "Attribute Label", "Attribute Type", "Attribute Orderby", "Attribute Terms", "Insert", "Update", "Delete"];
     const data = [
       headers,
-      ["pa_color", "Color / Terminación", "Color / Terminación", "select", "menu_order", attrData.colors.join(", "), ...commands],
-      ["pa_size", "Tamaño", "Tamaño", "select", "menu_order", attrData.sizes.join(", "), ...commands],
-      ["pa_diametro", "Diametro", "Diametro", "select", "menu_order", attrData.diametros.join(", "), ...commands],
-      ["pa_modelo", "Modelo", "Modelo", "select", "menu_order", attrData.modelos.join(", "), ...commands]
+      ["pa_color", "Color", "Color", "select", "menu_order", attrData.colors.join(", "), ...commands],
+      ["pa_size", "Size", "Size", "select", "menu_order", attrData.sizes.join(", "), ...commands],
+      ["pa_diametro", "Diameter", "Diameter", "select", "menu_order", attrData.diametros.join(", "), ...commands],
+      ["pa_modelo", "Model", "Model", "select", "menu_order", attrData.modelos.join(", "), ...commands]
     ];
     sheet.clear();
     sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
   } catch (e) {
-    console.error(`Error sincronizando atributos en ${sheetId}: ${e.message}`);
+    console.error(`Error syncing attributes in ${sheetId}: ${e.message}`);
   }
 }
 
@@ -463,9 +442,9 @@ function getAttributeCommandsFromMaster(headers, rows) {
   const rowObj = {};
   headers.forEach((h, i) => { if(h) rowObj[h.trim()] = firstRow[i]; });
   return [
-    normalizeControlValue(rowObj['Insert'], 'Insert (Global)', 'GLOBAL'),
-    normalizeControlValue(rowObj['Update'], 'Update (Global)', 'GLOBAL'),
-    normalizeControlValue(rowObj['Delete'], 'Delete (Global)', 'GLOBAL')
+    normalizeControlValue(rowObj['Insert'], 'Insert', 'GLOBAL'),
+    normalizeControlValue(rowObj['Update'], 'Update', 'GLOBAL'),
+    normalizeControlValue(rowObj['Delete'], 'Delete', 'GLOBAL')
   ];
 }
 
@@ -474,10 +453,10 @@ function extractUniqueAttributes(headers, rows) {
   rows.forEach(row => {
     const rowObj = {};
     headers.forEach((header, index) => { if (header) rowObj[header.trim()] = row[index]; });
-    if (rowObj['Variable Color / Terminación']) attrs.colors.push(rowObj['Variable Color / Terminación']);
-    if (rowObj['Variable Tamaño']) attrs.sizes.push(rowObj['Variable Tamaño']);
-    if (rowObj['Variable Diametro']) attrs.diametros.push(rowObj['Variable Diametro']);
-    if (rowObj['Variable Modelo']) attrs.modelos.push(rowObj['Variable Modelo']);
+    if (rowObj['Attribute 1 value(s)']) attrs.colors.push(rowObj['Attribute 1 value(s)']);
+    if (rowObj['Attribute 2 value(s)']) attrs.sizes.push(rowObj['Attribute 2 value(s)']);
+    if (rowObj['Attribute 3 value(s)']) attrs.diametros.push(rowObj['Attribute 3 value(s)']);
+    if (rowObj['Attribute 4 value(s)']) attrs.modelos.push(rowObj['Attribute 4 value(s)']);
   });
   return {
     colors: [...new Set(attrs.colors)].filter(Boolean).sort(),
