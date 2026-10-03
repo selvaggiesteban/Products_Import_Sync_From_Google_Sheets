@@ -1,104 +1,70 @@
-# WooCommerce Professional Catalog Synchronizer (Google Sheets to WC API)
+# WooCommerce Professional Sync Engine
 
-A professional-grade synchronization engine built with Google Apps Script (GAS) that allows managing one or multiple WooCommerce stores from a single Master Google Sheet. 
+A high-performance, agnostic synchronization framework built with Google Apps Script (GAS) to manage large-scale product catalogs across multiple WooCommerce stores.
 
-This tool is designed for high-volume catalogs, implementing advanced engineering patterns to overcome the common limitations of the Google Apps Script environment.
+This engine decouples data extraction from API execution, allowing catalog management from various sources (Google Sheets or REST API Endpoints) while ensuring 100% data integrity and avoiding the common limitations of the GAS environment.
 
-## Core Engineering Features
+## 🏗️ System Architecture
 
-### 1. Checkpoint System (Timeout Prevention)
-Google Apps Script has a strict execution time limit. To handle large catalogs, this script implements a **Checkpoint System** using `PropertiesService`. If the execution reaches the safety time limit, it saves the last processed SKU and stops. When restarted, it resumes exactly where it left off.
+The framework operates as a linear pipeline, ensuring that data is normalized and validated before reaching the WooCommerce API:
 
-### 2. Automatic SKU Recovery
-Prevents synchronization breaks caused by existing products. If the script attempts to create a product that already exists in WooCommerce, it captures the error, queries the API for the existing Product ID, and automatically converts the operation into an **Update**.
+**`[Data Source]` $\rightarrow$ `[Transformation Engine]` $\rightarrow$ `[Contrast Manager]` $\rightarrow$ `[Unitary Pusher]` $\rightarrow$ `[Logging]`**
 
-### 3. Dual-Store Architecture (Retail & Wholesale)
-Supports multi-tenant synchronization. You can define different pricing, stock, and visibility rules for multiple stores (e.g., a Retail store and a Wholesale store) within the same Master Sheet.
+### 1. Data Source Strategies
+The engine is source-agnostic, implementing a strategy pattern for extraction:
+- **Google Sheets Strategy**: High-efficiency reading of Master Sheets with intermediate visibility layers.
+- **API Endpoint Strategy**: Direct integration with external JSON REST APIs for real-time catalog fetching.
 
-### 4. State-Aware Synchronization
-To optimize API usage and speed, the script first downloads the current remote state of the store. It then contrasts the Master Sheet with the remote data and pushes only the **actual changes**, avoiding redundant API calls.
+### 2. Transformation & Normalization Engine
+Ensures a seamless transfer between human-readable data and machine-readable API requirements:
+- **Hierarchical Ordering**: Guarantees a strict **Parent $\rightarrow$ Variation** sequence, mandatory for WooCommerce manual imports and API stability.
+- **Attribute Saturation**: Automatically populates parent product attributes by scanning all associated variations.
+- **Price Normalization**: A robust `cleanPrice` logic that handles various currency formats and decimal separators.
+- **State Mapping**: Translates human inputs (e.g., "SÍ", "1") into API-standard statuses (`publish`, `instock`).
 
-### 5. Hierarchical Data Ordering
-Ensures a strict **Parent $\rightarrow$ Child** row order in all outputs. This is mandatory for successful manual WooCommerce imports and ensures that variations are never created before their parent product.
-
-### 6. Attribute Saturation
-Automatically scans all child variations and injects the complete list of possible attribute values into the Parent product. This prevents the "attribute not an option" error during manual imports.
-
----
-
-## Data Normalization & Standardization
-
-To ensure a seamless transfer between a human-readable Master Sheet and a machine-readable API, the script implements a strict normalization process:
-
-### 1. Cleaning & Formatting Functions
-- **`cleanPrice(val)`**: Removes currency symbols and spaces, normalizes decimal separators (comma to dot), and forces a two-decimal format.
-- **`normalizeControlValue(val)`**: Converts control columns (Insert, Update, Delete) into a strict binary format (`"1"` or `"0"`).
-- **Global `trim()`**: Strips leading/trailing whitespace from all SKUs and names to prevent "ghost" differences.
-
-### 2. Data Type Mapping
-- **Status Mapping**: Converts `"SÍ"`, `"1"`, or `"si"` $\rightarrow$ `publish` and others $\rightarrow$ `draft`.
-- **Stock Mapping**: Converts `"SÍ"`, `"1"`, or `"si"` $\rightarrow$ `instock` and others $\rightarrow$ `outofstock`.
-- **Array Formatting**: Transforms comma-separated strings for categories and images into the required JSON array structures for the API.
+### 3. Intelligence & Stability Layer
+Designed for high-volume catalogs where traditional scripts would fail:
+- **State-Aware Sync**: Downloads the current remote state first and performs a field-by-field diff, pushing only **actual changes** to minimize API load.
+- **Checkpoint System**: Uses `PropertiesService` to save progress. If a GAS timeout occurs, the script resumes exactly from the last processed SKU.
+- **Automatic SKU Recovery**: If a product creation fails because the SKU already exists, the system automatically retrieves the Product ID and converts the operation into an **Update**.
 
 ---
 
-## Implementation Guide
+## 🚀 Implementation Guide
 
-### Required Credentials & Access
-To implement this automation, you need the following credentials for each store:
-- **WooCommerce REST API Keys**: 
-    - `Consumer Key (ck)`: Unique identifier for the API user.
-    - `Consumer Secret (cs)`: Secret key for authentication.
-    - *Permissions*: Must have **Read/Write** access.
-- **Google Spreadsheet IDs**:
-    - `Master Sheet ID`: The ID of the main database.
-    - `Intermediate Sheet ID`: The ID of the store-specific sheet used for visibility.
-- **Log Endpoint**:
-    - A WordPress URL (e.g., `/wp-json/tay-sync/v1/log`) where the script sends the execution summary.
+### Required Credentials
+For each store, the following is required:
+- **WooCommerce REST API Keys**: `Consumer Key (ck)` and `Consumer Secret (cs)` with **Read/Write** permissions.
+- **Data Source**: Either a Google Sheet ID or a JSON Endpoint URL.
+- **Log Endpoint**: A WordPress REST endpoint (via the provided plugin) to track execution results.
 
-### Column Mapping (Master Sheet $\rightarrow$ WooCommerce)
-The script maps columns from your Master Sheet to the WooCommerce API v3. You must ensure your Master Sheet contains these fields:
+### Data Mapping (Source $\rightarrow$ WooCommerce)
+The framework maps source fields to the WooCommerce API v3. Typical mapping includes:
 
-| Master Column (Example) | WC API Key | Description |
+| Source Field (Example) | WC API Key | Purpose |
 | :--- | :--- | :--- |
-| Product Name | `name` | The public title of the product |
-| Short Description | `short_description` | Brief summary for the product page |
-| Long Description | `description` | Full detailed description |
+| Product Name | `name` | Public title |
 | Regular Price | `regular_price` | Standard selling price |
-| Sale Price | `sale_price` | Discounted price |
-| SKU | `sku` | Unique product identifier (Required) |
-| Published | `status` | `1` = publish, `0` = draft |
-| Catalog Visibility | `catalog_visibility` | visibility in the store |
+| SKU | `sku` | Unique identifier (Required) |
+| Published | `status` | `publish` or `draft` |
 | Inventory | `stock_quantity` | Numerical stock amount |
-| In Stock? | `stock_status` | `1` = instock, `0` = outofstock |
-| Categories | `categories` | Comma-separated category names |
-| Images | `images` | Comma-separated image URLs |
+| Categories | `categories` | Categorization arrays |
 
 ---
 
-## Automation Workflow
+## 🛠️ Setup & Deployment
 
-The synchronization follows a linear, high-efficiency pipeline:
+### 1. Install the Logging Plugin
+Deploy the `woocommerce-api-updates.php` plugin to your WordPress site to enable execution tracking.
 
-1.  **Data Extraction**: The script reads the `Master Sheet` and identifies all products.
-2.  **Transformation**: Based on the store mode (Retail vs Wholesale), it extracts the corresponding prices and stock from the Master and generates a formatted dataset.
-3.  **Visibility Layer**: The transformed data is pushed to the `Intermediate Sheet`, allowing the user to verify what will be sent to the API.
-4.  **Remote State Fetch**: The script downloads all existing products from the WooCommerce store to create a local map of current SKUs and values.
-5.  **Contrast Analysis**: The local data is compared against the remote state to generate a queue of only necessary actions:
-    - `Insert`: Product exists in Master but not in WC.
-    - `Update`: Product exists in both but values have changed.
-    - `Delete`: Product marked for deletion in Master.
-6.  **Unitary Push with Recovery**: Changes are sent one by one. If a "Create" fails because the SKU exists, the **Recovery System** finds the ID and executes an "Update".
-7.  **Logging**: A final summary (inserted, updated, deleted, errors) is sent to the WordPress log endpoint.
+### 2. Deploy the Engine
+Copy the `WC_API_Updates_From_Google_Sheets.gs` code into your Google Apps Script editor.
 
----
+### 3. Configure
+Update the `CONFIG` object with your store credentials, source IDs, and column mappings.
 
-## Setup Steps
-1. **Install Logger**: Install `woocommerce-api-updates.php` as a plugin in your WordPress site.
-2. **Prepare Sheets**: Create your Master and Intermediate spreadsheets.
-3. **Deploy Script**: Copy `WC_API_Updates_From_Google_Sheets.gs` into the Google Apps Script editor of your Master Sheet.
-4. **Configure**: Fill in the `CONFIG` object with your credentials and column names.
-5. **Run**: Execute `mainSync`.
+### 4. Execution
+Run the `mainSync` function. For large catalogs, the system will automatically handle timeouts via the checkpoint system—simply run the function again to resume.
 
-## License
+## 📄 License
 MIT License.
