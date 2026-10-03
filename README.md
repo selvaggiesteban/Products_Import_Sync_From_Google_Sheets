@@ -18,7 +18,6 @@ Ensures a seamless transfer between human-readable data and machine-readable API
 - Hierarchical Ordering: Guarantees a strict Parent -> Variation sequence, mandatory for WooCommerce manual imports and API stability.
 - Attribute Saturation: Automatically populates parent product attributes by scanning all associated variations.
 - Price Normalization: A robust cleanPrice logic that handles various currency formats and decimal separators.
-- State Mapping: Translates human inputs (e.g., "SÍ", "1") into API-standard statuses (publish, instock).
 
 ### 3. Intelligence & Stability Layer
 Designed for high-volume catalogs where traditional scripts would fail:
@@ -40,7 +39,7 @@ For each store, the following is required:
 The framework maps source fields to the WooCommerce API v3. Typical mapping includes:
 
 | Source Field (Example) | WC API Key | Purpose |
-| :--- | :--- | : :--- |
+| :--- | :--- | :--- |
 | Product Name | name | Public title |
 | Regular Price | regular_price | Standard selling price |
 | SKU | sku | Unique identifier (Required) |
