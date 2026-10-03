@@ -75,7 +75,7 @@ function mainSync() {
     for (const storeKey in CONFIG.STORES) {
       const store = CONFIG.STORES[storeKey];
       
-      // EXTRACTOR: Sheets only (as per requested scope)
+      // EXTRACTOR: Google Sheets implementation
       const transformed = transformData(headers, rows, store.mode);
       updateSheet(store.sheetId, CONFIG.PRODUCTS_SHEET_NAME, transformed.data);
       syncAttributes(store.sheetId, uniqueAttributes, attrCommands);
@@ -453,7 +453,7 @@ function syncAttributes(sheetId, attrData, commands) {
     sheet.clear();
     sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
   } catch (e) {
-    console.error(`Error sincronizando atributos en ${sheetId}: ${e.//Sincronización de atributos en ${sheetId}: ${e.message}`);
+    console.error(`Error sincronizando atributos en ${sheetId}: ${e.message}`);
   }
 }
 
