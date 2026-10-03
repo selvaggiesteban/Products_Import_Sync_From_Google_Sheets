@@ -18,6 +18,28 @@ Supports multi-tenant synchronization. You can define different pricing, stock, 
 ### 4. State-Aware Synchronization
 To optimize API usage and speed, the script first downloads the current remote state of the store. It then contrasts the Master Sheet with the remote data and pushes only the **actual changes**, avoiding redundant API calls.
 
+### 5. Hierarchical Data Ordering
+Ensures a strict **Parent $\rightarrow$ Child** row order in all outputs. This is mandatory for successful manual WooCommerce imports and ensures that variations are never created before their parent product.
+
+### 6. Attribute Saturation
+Automatically scans all child variations and injects the complete list of possible attribute values into the Parent product. This prevents the "attribute not an option" error during manual imports.
+
+---
+
+## Data Normalization & Standardization
+
+To ensure a seamless transfer between a human-readable Master Sheet and a machine-readable API, the script implements a strict normalization process:
+
+### 1. Cleaning & Formatting Functions
+- **`cleanPrice(val)`**: Removes currency symbols and spaces, normalizes decimal separators (comma to dot), and forces a two-decimal format.
+- **`normalizeControlValue(val)`**: Converts control columns (Insert, Update, Delete) into a strict binary format (`"1"` or `"0"`).
+- **Global `trim()`**: Strips leading/trailing whitespace from all SKUs and names to prevent "ghost" differences.
+
+### 2. Data Type Mapping
+- **Status Mapping**: Converts `"SÍ"`, `"1"`, or `"si"` $\rightarrow$ `publish` and others $\rightarrow$ `draft`.
+- **Stock Mapping**: Converts `"SÍ"`, `"1"`, or `"si"` $\rightarrow$ `instock` and others $\rightarrow$ `outofstock`.
+- **Array Formatting**: Transforms comma-separated strings for categories and images into the required JSON array structures for the API.
+
 ---
 
 ## Implementation Guide
@@ -72,9 +94,9 @@ The synchronization follows a linear, high-efficiency pipeline:
 ---
 
 ## Setup Steps
-1. **Install Logger**: Install `products-import-sync-logger.php` as a plugin in your WordPress site.
+1. **Install Logger**: Install `woocommerce-api-updates.php` as a plugin in your WordPress site.
 2. **Prepare Sheets**: Create your Master and Intermediate spreadsheets.
-3. **Deploy Script**: Copy `Sincronizador_Generic.gs` into the Google Apps Script editor of your Master Sheet.
+3. **Deploy Script**: Copy `WC_API_Updates_From_Google_Sheets.gs` into the Google Apps Script editor of your Master Sheet.
 4. **Configure**: Fill in the `CONFIG` object with your credentials and column names.
 5. **Run**: Execute `mainSync`.
 
