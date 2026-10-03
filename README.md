@@ -83,5 +83,31 @@ Locate the `const CONFIG` block at the top of the script and update the followin
 2. Click **Run**.
 3. **Handling Timeouts**: Because of Google's execution limits, the script may stop. Simply click **Run** again; the system will read the last processed SKU from `PropertiesService` and resume without duplicating data.
 
+---
+
+## Troubleshooting
+
+### Common Issues & Solutions
+
+**1. "Product already exists" (HTTP 400/500)**
+- **Problem**: Attempting to create a product with a SKU that already exists in WooCommerce.
+- **Solution**: Integrated **Automatic SKU Recovery**. The engine detects this error, performs a real-time ID lookup by SKU, and automatically switches the operation from `POST` (Create) to `PUT` (Update).
+
+**2. Google Apps Script Execution Timeout**
+- **Problem**: GAS scripts have a maximum runtime (usually 6 minutes), which is insufficient for large catalogs.
+- **Solution**: **Checkpoint System**. The script saves the last successfully processed SKU in `PropertiesService`. Upon restart, it skips already processed items and resumes exactly where it left off.
+
+**3. Missing Parent Attributes in Variations**
+- **Problem**: WooCommerce requires parents of variable products to have defined attributes, or the variations will not be associated correctly.
+- **Solution**: **Attribute Saturation**. The transformation engine scans all child variations and automatically "saturates" the parent with the consolidated attribute values before pushing to the API.
+
+**4. Incorrect Product Ordering during Manual Imports**
+- **Problem**: Standard exports often group all parents first, then all variations, breaking the hierarchical link in some import tools.
+- **Solution**: **Hierarchical Clustering**. The engine refactors the data output so that each child variation is listed immediately after its specific parent.
+
+**5. Price Formatting Errors**
+- **Problem**: API rejection due to currency symbols, spaces, or inconsistent decimal separators (comma vs dot).
+- **Solution**: **Robust price cleaning**. The `cleanPrice` function strips non-numeric characters and normalizes decimal separators to meet WooCommerce API requirements.
+
 ## License
 MIT License.
